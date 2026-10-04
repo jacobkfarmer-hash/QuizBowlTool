@@ -5,18 +5,28 @@ const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 // One in-flight request, at least 400ms between starts: far below the documented 20/sec.
 let queue = Promise.resolve(); let lastStart = 0;
 export class ApiError extends Error { constructor(message: string, public status = 0) { super(message); } }
-export async function request(endpoint: string, params: Record<string, string | number | boolean>): Promise<unknown> {
+export async function request(endpoint: string, params: Record<string, string | number | boolean>, options: { signal?: AbortSignal; descriptiveErrors?: boolean } = {}): Promise<unknown> {
   let release!: () => void; const previous = queue; queue = new Promise<void>(resolve => { release = resolve; }); await previous;
   try {
     for (let attempt = 0; attempt < 3; attempt++) {
+      options.signal?.throwIfAborted();
       await delay(Math.max(0, 400 - (Date.now() - lastStart))); lastStart = Date.now();
+      options.signal?.throwIfAborted();
       try {
         const query = new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)]));
-        const response = await fetch(`${API.base}${endpoint}?${query}`, { signal: AbortSignal.timeout(12000) });
+        const timeout = AbortSignal.timeout(12000);
+        const response = await fetch(`${API.base}${endpoint}?${query}`, { signal: options.signal ? AbortSignal.any([timeout, options.signal]) : timeout });
         if (!response.ok) throw new ApiError(`QBReader returned ${response.status}.`, response.status);
         return await response.json();
       } catch (error) {
+        options.signal?.throwIfAborted();
         if (error instanceof ApiError && error.status >= 400 && error.status < 500 && error.status !== 429) throw error;
+        if (attempt === 2 && options.descriptiveErrors) {
+          if (navigator.onLine === false) throw new ApiError('You are offline. Reconnect and retry the failed terms.');
+          if (error instanceof ApiError && error.status === 429) throw new ApiError('QBReader rate limited this request. Wait a moment and retry.', 429);
+          if (error instanceof SyntaxError) throw new ApiError('QBReader returned data that could not be parsed. Retry this term.');
+          throw new ApiError('QBReader is unavailable or the request timed out. Retry the failed terms.', error instanceof ApiError ? error.status : 0);
+        }
         if (attempt === 2) throw new ApiError('Internet connection is required to load more QBReader questions. Check your connection and retry.');
         await delay(700 * 2 ** attempt);
       }

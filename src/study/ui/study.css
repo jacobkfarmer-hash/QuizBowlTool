@@ -1,0 +1,44 @@
+.study-page { max-width:1000px; margin:auto; }
+.study-heading, .study-row { display:flex; align-items:center; justify-content:space-between; gap:20px; }
+.study-heading { margin-bottom:25px; }
+.study-heading h1 { margin-bottom:10px; }
+.study-row h2, .study-row h3 { margin-bottom:8px; }
+.study-library { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr)); gap:20px; margin-bottom:25px; }
+.study-library .button-row { flex-wrap:wrap; }
+.study-page .panel { margin-bottom:22px; }
+.study-field { display:grid; gap:8px; margin:18px 0; }
+.study-field input, .study-field select { width:100%; }
+.study-page textarea { width:100%; resize:vertical; font:inherit; font-size:14px; line-height:1.6; border:1px solid var(--line); border-radius:6px; padding:12px; color:var(--text); background:var(--panel); }
+.study-import-row { display:flex; flex-wrap:wrap; gap:18px; align-items:center; margin:20px 0; }
+.study-import-row label { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+.study-difficulties { border:1px solid var(--line); border-radius:6px; display:flex; flex-wrap:wrap; gap:15px; padding:15px; margin:20px 0; }
+.study-difficulties legend { font-size:13px; padding:0 5px; }
+.study-difficulties label { display:flex; align-items:center; gap:6px; }
+.study-status { font-size:11px; color:var(--green); white-space:nowrap; }
+.study-status.attention { color:var(--accent); }
+.study-review-card { border-top:1px solid var(--line); padding:22px 0; }
+.study-clue-preview { font-family:Georgia,serif; font-size:18px; margin:18px 0; overflow-wrap:anywhere; }
+.study-review-card .button-row { margin:12px 0; flex-wrap:wrap; }
+.study-sources { max-height:360px; overflow:auto; margin:15px 0; }
+.study-sources p { font-size:13px; }
+.study-editor { padding:20px; background:var(--soft); border-radius:6px; margin-top:20px; }
+.study-set-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(110px,1fr)); gap:10px; max-height:300px; overflow:auto; }
+.study-set-grid button { min-height:65px; }
+.study-set-grid small { display:block; margin-top:5px; }
+.study-page progress { width:100%; accent-color:var(--green); height:12px; }
+.study-practice { max-width:760px; margin:auto; }
+.study-flashcard { padding:28px; }
+.study-card-meta { display:flex; justify-content:space-between; gap:20px; margin-bottom:20px; }
+.study-card-meta small { font-size:11px; }
+.study-clue { font-family:Georgia,serif; font-size:23px; line-height:1.65; overflow-wrap:anywhere; margin:0 0 25px; }
+.study-answer label { display:block; margin-bottom:10px; font-size:13px; color:var(--muted); }
+.study-answer > div { display:flex; gap:10px; }
+.study-answer input { flex:1; font-size:16px; padding:13px; }
+.study-feedback { min-height:30px; font-size:14px; margin:18px 0 8px; }
+.study-feedback.success { color:var(--green); font-weight:600; }
+.study-feedback.incorrect { color:var(--accent); font-weight:600; }
+.study-reveal { font-size:11px; }
+.study-revealed { margin:15px 0 0; font-weight:600; }
+.study-summary h1 { font-size:32px; }
+.study-summary .button-row { flex-wrap:wrap; }
+@media(max-width:760px) { .study-heading { flex-wrap:wrap; gap:10px; } .study-heading h1 { font-size:32px; } .study-flashcard { padding:22px; } .study-clue { font-size:21px; } .study-row { flex-wrap:wrap; gap:6px; } .study-answer>div { flex-wrap:wrap; } .study-answer input { width:100%; flex-basis:100%; } .study-answer button { min-height:44px; width:100%; } .study-page .field-grid { grid-template-columns:1fr; } }
