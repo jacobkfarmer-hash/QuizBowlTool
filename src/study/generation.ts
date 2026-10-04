@@ -5,9 +5,9 @@ import { searchSources } from './sources';
 import type { Deck, Flashcard, ImportedTerm, SourceItem } from './types';
 
 export function generateCard(term: ImportedTerm, sources: SourceItem[], existing: Flashcard): Flashcard {
-  const concepts = rankClues(clusterClues(sources.flatMap(segmentClues), term.answer));
+  const evidence = clusterClues(sources.flatMap(segmentClues), term.answer), concepts = rankClues(evidence);
   const answerType = inferAnswerType(term, sources), metadata = dominantMetadata(sources, term.category);
-  const usableIds = new Set(sources.filter(s => segmentClues(s).some(segment => clusterClues([segment], term.answer).length)).map(s => s.id));
+  const usableIds = new Set(evidence.flatMap(c => c.sourceIds));
   // Related bonus facts can enrich a card, but only direct answer evidence establishes trust.
   const sourceCount = sources.filter(s => !s.related && usableIds.has(s.id)).length;
   const aliases = [...new Set(sources.filter(s => !s.related).flatMap(s => answerAliases(s.answerline)))]

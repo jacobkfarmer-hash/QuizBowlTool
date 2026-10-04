@@ -21,6 +21,11 @@
 .study-review-card .button-row { margin:12px 0; flex-wrap:wrap; }
 .study-sources { max-height:360px; overflow:auto; margin:15px 0; }
 .study-sources p { font-size:13px; }
+.study-clue-evidence { margin:12px 0; font-size:13px; }
+.study-clue-evidence dl { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:8px 20px; }
+.study-clue-evidence dl div { display:flex; justify-content:space-between; gap:12px; }
+.study-clue-evidence dt { color:var(--muted); }
+.study-clue-evidence dd { margin:0; }
 .study-editor { padding:20px; background:var(--soft); border-radius:6px; margin-top:20px; }
 .study-set-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(110px,1fr)); gap:10px; max-height:300px; overflow:auto; }
 .study-set-grid button { min-height:65px; }

@@ -149,3 +149,43 @@ test('400-term generation remains cancellable and retains partial progress after
   await expect(page.locator('.study-review-card').first()).toContainText('Ready');
   await expect(page.getByRole('button', { name: 'Continue / retry failed terms' })).toBeVisible();
 });
+
+test('contextual sculptor cards persist diagnostics in review and keep practice compact on mobile', async ({ page }) => {
+  const answer = 'Gian Lorenzo Bernini';
+  const question = 'His unfinished <i>Truth Unveiled by Time</i> depicts a woman holding the sun. '
+    + '<i>Blessed Ludovica Albertoni</i> lies above a red marble sarcophagus. '
+    + 'Pluto’s fingers press into Proserpina in <i>Rape of Proserpina</i>. (*) '
+    + '<i>Apollo and Daphne</i> depicts Daphne turning into a laurel tree. '
+    + '<i>Fountain of the Four Rivers</i> stands in Piazza Navona. '
+    + '<i>Ecstasy of St. Teresa</i> depicts an angel and a swooning nun. For 10 points, name this Italian sculptor.';
+  await page.route('https://www.qbreader.org/api/**', async route => {
+    const url = new URL(route.request().url());
+    const direct = url.searchParams.get('searchType') === 'answer';
+    await route.fulfill({ json: { tossups: { count: direct ? 12 : 0, questionArray: direct ? Array.from({ length: 12 }, (_, i) => ({ ...tossup, _id: `art-${i}`, answer, question, category: 'Fine Arts', subcategory: 'Sculpture', set: { ...tossup.set, year: 2026 - i % 3, _id: `set-${i}` } })) : [] }, bonuses: { count: 0, questionArray: [] } } });
+  });
+  await page.setViewportSize({ width: 390, height: 844 }); await page.goto('/');
+  await page.getByRole('navigation').getByRole('button', { name: 'Study', exact: true }).click();
+  await page.getByRole('button', { name: 'Create Deck', exact: true }).click();
+  await page.getByLabel('Deck name', { exact: true }).fill('Baroque sculpture'); await page.getByLabel('Answer terms').fill(answer);
+  await page.getByRole('button', { name: 'Analyze QBReader', exact: true }).click();
+  await expect(page.getByText('Analysis complete. Review or save your deck.')).toBeVisible({ timeout: 30000 });
+  const card = page.locator('.study-review-card');
+  await expect(card).toContainText('12 relevant questions/items · 6 clues selected');
+  for (const detail of ['Sculptor:', 'Unfinished', 'sarcophagus', 'fingers', 'laurel tree', 'Piazza Navona', 'swooning nun']) await expect(card.locator('.study-clue-preview')).toContainText(detail);
+  await expect(card.getByText('Recency-weighted tossup position', { exact: true }).first()).not.toBeVisible();
+  await card.getByText('Sources & generation evidence', { exact: true }).click();
+  await card.locator('.study-clue-evidence summary').first().click();
+  await expect(card.getByText('Recency-weighted tossup position', { exact: true }).first()).toBeVisible();
+  await expect(card.getByText('Recent early power questions', { exact: true }).first()).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.getByRole('button', { name: 'Save Deck', exact: true }).click();
+  await expect(page.getByText('Deck saved to your library.')).toBeVisible(); await page.reload();
+  await page.getByRole('navigation').getByRole('button', { name: 'Study', exact: true }).click();
+  await page.getByRole('region', { name: 'Deck library' }).getByRole('button', { name: 'Study', exact: true }).click();
+  await page.getByRole('button', { name: 'Set 1', exact: false }).click();
+  await expect(page.getByTestId('flashcard-clue')).toContainText('swooning nun');
+  await expect(page.getByText('Hard score', { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel('Your answer', { exact: true })).toBeFocused();
+  await page.getByLabel('Your answer', { exact: true }).fill(answer); await page.keyboard.press('Enter');
+  await expect(page.getByRole('heading', { name: 'Set Complete — 1 cards' })).toBeVisible();
+});

@@ -19,6 +19,7 @@ export function extractSources(data: unknown, target: string, relatedOnly = fals
     const structural = (raw as Record<string, unknown>).powerWords;
     result.push({ id: `tossup:${q._id}`, questionId: q._id, kind: 'tossup', text: q.question, answerline: q.answer,
       category: q.category, subcategory: q.subcategory, difficulty: q.difficulty, setName: q.set.name, packetName: q.packet.name,
+      year: q.set.year, setId: q.set._id, updatedAt: q.updatedAt,
       powerWords: typeof structural === 'number' ? structural : undefined });
   }
   for (const raw of list(data, 'bonuses')) {
@@ -31,7 +32,7 @@ export function extractSources(data: unknown, target: string, relatedOnly = fals
       const answer = plainText(q.answers[part]).split(/[[(]/)[0].trim();
       const text = direct ? q.parts[part] : `${q.parts[part]} Associated answer: ${answer}.`;
       result.push({ id: `bonus:${q._id}:${part}`, questionId: q._id, kind: 'bonus', text, answerline: q.answers[part],
-        category: q.category, subcategory: q.subcategory, difficulty: q.difficulty, setName: q.set.name, packetName: q.packet.name, part, related: !direct });
+        category: q.category, subcategory: q.subcategory, difficulty: q.difficulty, setName: q.set.name, packetName: q.packet.name, year: q.set.year, setId: q.set._id, updatedAt: q.updatedAt, part, related: !direct });
     }
   }
   return result;
@@ -44,6 +45,16 @@ export async function searchSources(target: string, difficulties: number[], sign
   const params = { queryString: target.replace(/^(?:a|an|the)\s+/i, ''), difficulties: difficulties.join(','), exactPhrase: true, maxReturnLength: 80, randomize: false };
   const data = await request('/query', { ...params, searchType: 'answer', questionType: 'all' }, { signal, descriptiveErrors: true });
   const items = extractSources(data, target);
+  // The API's bounded historical sample is not necessarily sorted by publication year.
+  // Preserve it, but sample recent tossups separately when the original results are truncated.
+  const tossups = data && typeof data === 'object' ? (data as Record<string, unknown>).tossups : undefined;
+  const count = tossups && typeof tossups === 'object' ? (tossups as Record<string, unknown>).count : undefined;
+  if (typeof count === 'number' && count > 80) {
+    try {
+      const recent = await request('/query', { ...params, searchType: 'answer', questionType: 'tossup', minYear: new Date().getFullYear() - 5 }, { signal, descriptiveErrors: true });
+      items.push(...extractSources(recent, target));
+    } catch (error) { if (signal?.aborted) throw error; }
+  }
   // Supplemental bonuses are optional: direct evidence survives a failed supplemental query.
   try {
     const bonuses = await request('/query', { ...params, searchType: 'question', questionType: 'bonus', maxReturnLength: 25 }, { signal, descriptiveErrors: true });

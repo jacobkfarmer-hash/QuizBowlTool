@@ -9,10 +9,27 @@ export interface SourceItem {
   id: string; questionId: string; kind: 'tossup' | 'bonus'; text: string;
   answerline: string; category: string; subcategory: string; difficulty: number;
   setName: string; packetName: string; part?: number; related?: boolean; powerWords?: number;
+  year?: number; setId?: string; updatedAt?: string;
+}
+export interface ClueOccurrence {
+  sourceId: string; questionId: string; kind: 'tossup' | 'bonus'; tournament: string;
+  year?: number; relativePosition?: number; sentencePosition?: number;
+  inPower: boolean; anchor: string; context: string; position: number; sentenceId: string;
+  associatedTitle?: string;
+}
+export interface ClueDiagnostics {
+  independentQuestionCount: number; rawOccurrenceCount: number; powerOccurrenceCount: number;
+  powerRate: number; weightedPowerOccurrences: number; recentOccurrenceCount: number;
+  recentEarlyOccurrenceCount: number; recentEarlyPowerOccurrenceCount: number;
+  averageRelativePosition?: number; weightedAverageRelativePosition?: number; averageSentencePosition?: number;
+  newestAppearanceYear?: number; oldestAppearanceYear?: number; numberOfDistinctYears: number;
+  numberOfDistinctTournaments: number; distinctivenessScore: number; genericnessPenalty: number;
+  staleCluePenalty: number; finalHardScore: number; finalCommonScore: number;
 }
 export interface ClueConcept {
   text: string; pool: 'hard' | 'common'; sourceIds: string[];
   frequency: number; powerFrequency: number; score: number;
+  anchor?: string; occurrences?: ClueOccurrence[]; diagnostics?: ClueDiagnostics;
 }
 export interface Flashcard {
   id: string; deckId: string; sourceTerm: string; answer: string; normalizedAnswer: string;

@@ -1,184 +1,140 @@
 import { plainText } from '../api/parser';
 import { normalizeAnswer } from './answers';
-import type { ClueConcept, ImportedTerm, SourceItem } from './types';
+import { conceptSimilarity, conceptTokens, entityNames, STOP } from './clue-text';
+import { connectWorkDetails, type ConceptCluster } from './connections';
+import { cleanCluePhrase, detailStrength, generateCluePhrase } from './phrases';
+import { positionedSegments, relativeCluePosition, type PositionedSegment } from './positions';
+import { occurrenceScore, scoreConcept } from './scoring';
+import type { ClueConcept, ClueOccurrence, SourceItem } from './types';
+export { conceptSimilarity, conceptTokens } from './clue-text';
+export { dominantMetadata, formatClue, inferAnswerType } from './answer-types';
+export type Segment = Omit<PositionedSegment, 'context'> & { context?: string };
 
-export interface Segment { text: string; pool: 'hard' | 'common'; sourceId: string }
+// Preserve this public helper for existing callers, while segmentation uses absolute positions.
 export function powerSections(html: string, powerWords?: number): { hard: string; common: string } {
   const text = plainText(html);
+  if (Number.isInteger(powerWords) && powerWords! > 0) {
+    const words = text.replace(/\(\*\)/g, '').trim().split(/\s+/);
+    return { hard: words.slice(0, powerWords).join(' '), common: words.slice(powerWords).join(' ') };
+  }
   const marker = text.indexOf('(*)');
   if (marker >= 0) return { hard: text.slice(0, marker), common: text.slice(marker + 3) };
-  if (Number.isInteger(powerWords) && powerWords! > 0) {
-    const words = text.split(/\s+/); return { hard: words.slice(0, powerWords).join(' '), common: words.slice(powerWords).join(' ') };
-  }
-  // Only an initial continuous bold region is evidence of power. Bold names elsewhere are not.
   const prefix = html.match(/^\s*(?:<(?:b|strong)\b[^>]*>[\s\S]*?<\/(?:b|strong)>\s*[,;:–—-]?\s*)+/i);
-  if (prefix) {
-    return { hard: plainText(prefix[0]), common: plainText(html.slice(prefix[0].length)) };
-  }
-  return { hard: '', common: text };
+  return prefix ? { hard: plainText(prefix[0]), common: plainText(html.slice(prefix[0].length)) } : { hard: '', common: text };
 }
-export function segmentClues(source: SourceItem): Segment[] {
-  const sections = source.kind === 'tossup' ? powerSections(source.text, source.powerWords) : { hard: '', common: plainText(source.text) };
-  const result: Segment[] = [];
-  for (const pool of ['hard', 'common'] as const) {
-    // Protect initials and common abbreviations before sentence segmentation.
-    const protectedText = sections[pool].replace(/\b(?:[A-Z]|Mr|Mrs|Dr|St)\./g, m => m.replace('.', '\uE000'));
-    for (const phrase of protectedText.split(/(?<=[.!?])\s+(?=[A-Z“"[])|\s*;\s*/)) {
-      const text = phrase.replace(/\uE000/g, '.').replace(/\[[^\]]*\]/g, '').trim();
-      if (text.length >= 8) result.push({ text, pool, sourceId: source.id });
-    }
-  }
-  return result;
+export const segmentClues = (source: SourceItem): Segment[] => positionedSegments(source);
+interface Candidate { anchor: string; segment: Segment; position: number; title: boolean }
+function candidate(anchor: string, segment: Segment, title = false, offset?: number): Candidate {
+  const found = segment.text.toLowerCase().indexOf(anchor.toLowerCase());
+  return { anchor, segment, title, position: (segment.start || 0) + Math.max(0, offset ?? found) };
 }
-const STOP = new Set(('a an the this that these those it its his her their he she they who which what whose of in on at to for from by with and or as is are was were be been being has have had not one two three first name identify work works author novel play poem country man woman character characters person people also such called about after before when where into out through over under can would will does did during ftpe ftp points following names wrote written named another important famous most very many much something known related described describes associated answer protagonist').split(' '));
-const SYNONYMS: Record<string, string> = { thrown: 'throw', throws: 'throw', threw: 'throw', tosses: 'throw', tossed: 'throw', hurled: 'throw', hurls: 'throw', flung: 'throw', burning: 'burn', burned: 'burn', burnt: 'burn', fire: 'burn', tears: 'tear', tore: 'tear', grey: 'gray', chinese: 'china', windows: 'window', lanterns: 'lantern' };
-export function conceptTokens(text: string): string[] {
-  return [...new Set(normalizeAnswer(text).split(' ').filter(t => t.length > 1 && !STOP.has(t)).map(t => SYNONYMS[t] || (t.length > 5 ? t.replace(/(?:ing|ed|s)$/, '') : t)))];
+function titlesIn(segment: Segment): string[] {
+  return (segment.titles || []).filter(t => normalizeAnswer(segment.text).includes(normalizeAnswer(t)));
 }
-export function conceptSimilarity(a: string, b: string): number {
-  const aa = new Set(conceptTokens(a)), bb = new Set(conceptTokens(b));
-  if (!aa.size || !bb.size) return 0;
-  const overlap = [...aa].filter(t => bb.has(t)).length;
-  return Math.max(overlap / (aa.size + bb.size - overlap), overlap >= 2 ? .8 * overlap / Math.min(aa.size, bb.size) : 0);
+function baseCandidates(segment: Segment, target: string): Candidate[] {
+  const titles = titlesIn(segment).filter(t => !normalizeAnswer(t).includes(normalizeAnswer(target)));
+  if (titles.length) return titles.map(t => candidate(t, segment, true));
+  const names = entityNames(segment.text).filter(t => !normalizeAnswer(t).includes(normalizeAnswer(target)));
+  if (names.length) return names.map(t => candidate(t, segment));
+  const text = cleanCluePhrase(segment.text, target);
+  return text && text.split(/\s+/).length <= 22 && conceptTokens(text).length >= 2 ? [candidate(text, segment)] : [];
 }
-function cleanPhrase(value: string, target: string): string {
-  let text = value.replace(/\(\*\)/g, '').replace(/\b(?:for (?:ten|10) points|FTP|FTPE),?\s*/gi, '')
-    .replace(/^(?:name|identify)\s+(?:this|the)\s+\w+[,:]?\s*/i, '')
-    .replace(/^(?:in|of|from)\s+this\s+(?:play|novel|poem|work|country|city)[,:]?\s*/i, '')
-    .replace(/^this\s+(?:play|novel|poem|work|author|country|city|person|battle)\s+/i, '')
-    .replace(/\b(?:this|that)\s+(play|novel|poem|work|author|country|city|person|battle)\b/gi, 'the $1')
-    .replace(/\b(?:during|in|on|at|with|by|for|to)\s+(?:a|an|the|this)?\s*$/i, '')
-    .replace(/\s+/g, ' ').replace(/^[\s,.:;’']+|[\s,.:;!?]+$/g, '').trim();
-  // Discard answer-revealing phrases rather than altering their factual meaning.
-  if (!text || normalizeAnswer(text).includes(normalizeAnswer(target))) return '';
-  const words = text.split(' ');
-  if (words.length > 22) {
-    // Prefer an intact short clause over a sentence-sized clue.
-    const clauses = text.split(/,\s+|\s+(?:while|although|because|whereas)\s+/);
-    const concise = clauses.find(c => c.split(' ').length >= 4 && c.split(' ').length <= 18 && /[A-Z]|"|“/.test(c));
-    if (concise) text = concise;
-    else return ''; // Never truncate to an unsupported or incomplete statement.
-  }
-  return text.charAt(0).toUpperCase() + text.slice(1);
-}
-function candidates(segment: Segment, target: string): string[] {
-  const whole = cleanPhrase(segment.text, target);
-  const entities = [...segment.text.matchAll(/\b[A-Z][\p{L}’'-]+(?:\s+(?:[A-Z][\p{L}’'-]+|(?:(?:of|the|on|and|de|van|a|an)\s+){1,3}[A-Z][\p{L}’'-]+)){1,6}/gu)]
-    .map(m => cleanPhrase(m[0], target)).filter(s => s && conceptTokens(s).length >= 2);
-  // A sentence that has multiple distinct facts can still yield its recurring named entities.
-  return [...new Set([whole, ...entities].filter(s => s && conceptTokens(s).length >= 2))];
-}
-function recurringPhrases(segments: Segment[], target: string): Segment[] {
-  const phrases = new Map<string, { text: string; appearances: Map<string, Segment> }>();
+function minePhrases(segments: Segment[], target: string): Candidate[] {
+  const phrases = new Map<string, { anchor: string; tokens: string[]; matches: Map<string, Candidate>; weight: number }>();
   for (const segment of segments) {
-    const words = segment.text.replace(/[“”"(),;.!?]/g, ' ').split(/\s+/).filter(Boolean);
+    if (titlesIn(segment).length) continue;
+    const words = [...segment.text.matchAll(/[\p{L}\p{N}’'-]+/gu)];
     for (let start = 0; start < words.length; start++) for (let length = 2; length <= 7 && start + length <= words.length; length++) {
-      const span = words.slice(start, start + length);
-      if (STOP.has(normalizeAnswer(span[0])) || STOP.has(normalizeAnswer(span.at(-1)!))) continue;
-      const text = cleanPhrase(span.join(' '), target), tokens = conceptTokens(text);
-      if (!text || text.length > 65 || tokens.length < 2) continue;
-      const key = [...tokens].sort().join(' ');
-      if (!phrases.has(key)) phrases.set(key, { text, appearances: new Map() });
-      const entry = phrases.get(key)!;
-      entry.appearances.set(`${segment.sourceId}|${segment.pool}`, { ...segment, text: entry.text });
+      const end = words[start + length - 1];
+      if (STOP.has(normalizeAnswer(words[start][0])) || STOP.has(normalizeAnswer(end[0]))) continue;
+      const anchor = cleanCluePhrase(segment.text.slice(words[start].index!, end.index! + end[0].length), target);
+      const tokens = conceptTokens(anchor);
+      if (!anchor || anchor.length > 80 || tokens.length < 2) continue;
+      const key = [...tokens].sort().join(' '), item = candidate(anchor, segment, false, words[start].index);
+      if (!phrases.has(key)) phrases.set(key, { anchor, tokens, matches: new Map(), weight: 0 });
+      const entry = phrases.get(key)!, question = `${segment.kind || 'tossup'}:${segment.questionId || segment.sourceId}`;
+      if (!entry.matches.has(question)) { entry.matches.set(question, item); entry.weight += occurrenceScore(toOccurrence(item)); }
     }
   }
-  // Cap mining work, and prefer recurring, longer distinctive phrases over fragments.
-  const recurring = [...phrases.values()].filter(p => new Set([...p.appearances.values()].map(s => s.sourceId)).size >= 2)
-    .map(p => ({ ...p, tokens: conceptTokens(p.text) }))
-    .sort((a, b) => b.appearances.size - a.appearances.size || b.tokens.length - a.tokens.length).slice(0, 600);
-  const byToken = new Map<string, number[]>();
-  recurring.forEach((p, i) => p.tokens.forEach(token => { const ids = byToken.get(token) || []; ids.push(i); byToken.set(token, ids); }));
-  const frequent = recurring.filter(p => {
-    const tokens = p.tokens;
-    const possible = tokens.map(token => byToken.get(token)!).sort((a, b) => a.length - b.length)[0];
-    return !possible.some(i => {
-      const other = recurring[i];
-      if (other === p || other.appearances.size < p.appearances.size * .6) return false;
-      const longer = other.tokens;
-      return longer.length > tokens.length && tokens.every(t => longer.includes(t));
-    });
-  }).sort((a, b) => b.appearances.size - a.appearances.size || conceptTokens(b.text).length - conceptTokens(a.text).length).slice(0, 180);
-  return frequent.flatMap(p => [...p.appearances.values()]);
+  const frequent = [...phrases.values()].filter(p => p.matches.size >= 2).sort((a, b) => b.weight - a.weight || b.tokens.length - a.tokens.length).slice(0, 500);
+  const byToken = new Map<string, Set<number>>();
+  frequent.forEach((p, i) => p.tokens.forEach(token => { if (!byToken.has(token)) byToken.set(token, new Set()); byToken.get(token)!.add(i); }));
+  return frequent.filter(p => {
+    const possible = p.tokens.map(t => byToken.get(t)!).sort((a, b) => a.size - b.size)[0];
+    return ![...possible].some(i => { const other = frequent[i]; return other !== p && other.weight >= p.weight * .7 && other.tokens.length > p.tokens.length && p.tokens.every(t => other.tokens.includes(t)); });
+  }).slice(0, 120).flatMap(p => [...p.matches.values()]);
 }
-export function clusterClues(segments: Segment[], target: string): ClueConcept[] {
-  const clusters: { phrases: string[]; sources: Set<string>; hard: Set<string>; representative: string }[] = [];
+function toOccurrence(c: Candidate): ClueOccurrence {
+  const s = c.segment, kind = s.kind || 'tossup';
+  return { sourceId: s.sourceId, questionId: s.questionId || s.sourceId, kind, tournament: s.tournament || s.sourceId,
+    year: s.year, relativePosition: kind === 'bonus' ? undefined : s.totalLength ? relativeCluePosition(c.position, s.totalLength) : s.relativePosition,
+    sentencePosition: kind === 'bonus' ? undefined : s.sentencePosition,
+    inPower: kind === 'tossup' && (s.powerBoundary !== undefined ? c.position < s.powerBoundary : s.pool === 'hard'),
+    anchor: c.anchor, context: s.context || s.text, position: c.position, sentenceId: s.sentenceId || `${s.sourceId}:${s.start || 0}` };
+}
+export function clusterClues(segments: Segment[], target: string, currentYear = new Date().getFullYear()): ClueConcept[] {
+  const clusters: ConceptCluster[] = [];
   const index = new Map<string, Set<number>>();
-  for (const segment of [...segments, ...recurringPhrases(segments, target)]) for (const phrase of candidates(segment, target)) {
-    const tokens = conceptTokens(phrase);
-    const possible = new Set(tokens.flatMap(token => [...(index.get(token) || [])]));
+  const all = [...segments.flatMap(s => baseCandidates(s, target)), ...minePhrases(segments, target)];
+  for (const c of all) {
+    const tokens = conceptTokens(c.anchor);
+    if (tokens.length < 2) continue;
+    const possible = new Set(tokens.flatMap(t => [...(index.get(t) || [])]));
     let best = -1, similarity = .62;
     for (const i of possible) {
-      const value = conceptSimilarity(phrase, clusters[i].representative);
+      if (c.title !== clusters[i].title && c.title && conceptSimilarity(c.anchor, clusters[i].anchor) < .75) continue;
+      const value = conceptSimilarity(c.anchor, clusters[i].anchor);
       if (value > similarity) { best = i; similarity = value; }
     }
-    if (best < 0) { best = clusters.length; clusters.push({ phrases: [], sources: new Set(), hard: new Set(), representative: phrase }); }
-    const cluster = clusters[best]; cluster.phrases.push(phrase); cluster.sources.add(segment.sourceId);
-    if (segment.pool === 'hard') cluster.hard.add(segment.sourceId);
-    // Use an actual source phrase, preferring a compact representative with identifying detail.
-    const phraseTokens = conceptTokens(phrase).length;
-    const properName = /^(?:[A-Z][\p{L}’'-]+\s+)+[A-Z][\p{L}’'-]+$/u.test(phrase) || /^[A-Z][\p{L}’'-]+\s+[\p{L}’'-]+$/u.test(phrase);
-    if (phrase.length < cluster.representative.length && (phraseTokens >= 3 || properName || conceptTokens(cluster.representative).length <= 2)) cluster.representative = phrase;
-    for (const token of tokens) { if (!index.has(token)) index.set(token, new Set()); index.get(token)!.add(best); }
+    if (best < 0) { best = clusters.length; clusters.push({ anchor: c.anchor, title: c.title, tokens, occurrences: new Map() }); }
+    const cluster = clusters[best], occurrence = toOccurrence(c);
+    const key = `${occurrence.sourceId}|${occurrence.sentenceId}`;
+    const previous = cluster.occurrences.get(key);
+    if (!previous || occurrenceScore(occurrence, currentYear) > occurrenceScore(previous, currentYear)) cluster.occurrences.set(key, occurrence);
+    if (c.title || (!cluster.title && c.anchor.length < cluster.anchor.length && tokens.length >= 2)) { cluster.anchor = c.anchor; cluster.tokens = tokens; cluster.title ||= c.title; }
+    tokens.forEach(t => { if (!index.has(t)) index.set(t, new Set()); index.get(t)!.add(best); });
   }
-  return clusters.map(c => {
-    const text = c.representative, frequency = c.sources.size, powerFrequency = c.hard.size;
-    const entity = /\b[A-Z][a-z]+\s+[A-Z]/.test(text) ? 1.5 : 0;
-    const specificity = Math.min(4, conceptTokens(text).length / 2);
-    return { text, frequency, powerFrequency, sourceIds: [...c.sources], pool: powerFrequency > 0 ? 'hard' : 'common', score: frequency * 5 + powerFrequency * 2 + specificity + entity };
+  const totalQuestions = new Set(segments.map(s => `${s.kind || 'tossup'}:${s.questionId || s.sourceId}`)).size;
+  const documentFrequency = new Map<string, Set<string>>();
+  for (const s of segments) for (const token of conceptTokens(s.text)) {
+    if (!documentFrequency.has(token)) documentFrequency.set(token, new Set());
+    documentFrequency.get(token)!.add(`${s.kind || 'tossup'}:${s.questionId || s.sourceId}`);
+  }
+  return connectWorkDetails(clusters).map(c => {
+    const occurrences = [...c.occurrences.values()];
+    const text = generateCluePhrase(c.anchor, occurrences, target), tokens = conceptTokens(c.anchor);
+    const idf = tokens.reduce((sum, t) => sum + Math.log1p(totalQuestions / Math.max(1, documentFrequency.get(t)?.size || 0)), 0) / Math.max(1, tokens.length);
+    const distinctiveness = .9 + Math.min(.5, idf * .15) + (c.title ? .2 : 0) + Math.min(.35, detailStrength(text, c.anchor) * .04);
+    const genericness = tokens.length < 2 ? 5 : /\b(?:important figure|several works|this person|this artist|this country)\b/i.test(text) ? 4 : /^(?:depicts?|shows?|features?)\s+(?:a|an|the)\s+\w+$/i.test(text) ? 4 : 0;
+    const diagnostics = scoreConcept(occurrences, distinctiveness, genericness, currentYear);
+    const position = diagnostics.weightedAverageRelativePosition;
+    const hard = position !== undefined ? position <= .38 || (position <= .5 && diagnostics.powerRate > .3) : diagnostics.powerRate > 0;
+    return { text, anchor: c.anchor, occurrences, diagnostics, frequency: diagnostics.independentQuestionCount,
+      powerFrequency: diagnostics.powerOccurrenceCount, sourceIds: [...new Set(occurrences.map(o => o.sourceId))],
+      pool: hard ? 'hard' as const : 'common' as const, score: hard ? diagnostics.finalHardScore : diagnostics.finalCommonScore };
+  }).filter(c => c.text && conceptTokens(c.text).length >= 2);
+}
+export function redundantConcept(a: ClueConcept, b: ClueConcept): boolean {
+  const aa = a.anchor || a.text, bb = b.anchor || b.text;
+  return conceptSimilarity(aa, bb) >= .55 || normalizeAnswer(aa).includes(normalizeAnswer(bb)) || normalizeAnswer(bb).includes(normalizeAnswer(aa));
+}
+export function orderClues(concepts: ClueConcept[]): ClueConcept[] {
+  return [...concepts].sort((a, b) => {
+    if (a.pool !== b.pool) return a.pool === 'hard' ? -1 : 1;
+    const ap = a.diagnostics?.weightedAverageRelativePosition, bp = b.diagnostics?.weightedAverageRelativePosition;
+    if (ap !== undefined && bp !== undefined && Math.floor(ap * 20) !== Math.floor(bp * 20)) return Math.floor(ap * 20) - Math.floor(bp * 20);
+    return a.pool === 'hard' ? (b.diagnostics?.finalHardScore ?? b.score) - (a.diagnostics?.finalHardScore ?? a.score)
+      : (a.diagnostics?.finalCommonScore ?? a.score) - (b.diagnostics?.finalCommonScore ?? b.score);
   });
 }
 export function rankClues(concepts: ClueConcept[], limit = 6): ClueConcept[] {
-  const ranked = [...concepts].sort((a, b) => b.score - a.score || a.text.length - b.text.length);
-  const chosen: ClueConcept[] = [];
-  const add = (c: ClueConcept) => {
-    if (chosen.length < limit && !chosen.some(p => conceptSimilarity(p.text, c.text) >= .55 || normalizeAnswer(p.text).includes(normalizeAnswer(c.text)) || normalizeAnswer(c.text).includes(normalizeAnswer(p.text)))) chosen.push(c);
-  };
-  // Repeated evidence outranks singletons. Start with three power concepts, then three common.
-  const recurring = ranked.filter(c => c.frequency >= 2);
-  for (const pool of ['hard', 'common'] as const) for (const clue of recurring.filter(c => c.pool === pool).sort((a, b) => pool === 'hard' ? b.powerFrequency - a.powerFrequency || b.score - a.score : b.score - a.score)) {
-    if (chosen.filter(c => c.pool === pool).length < 3) add(clue);
-  }
-  for (const clue of recurring) add(clue);
-  // Sparse material may provide fewer concepts; singletons are visibly kept under review.
-  if (chosen.length < 5) for (const clue of ranked) add(clue);
-  return chosen.sort((a, b) => (a.pool === 'hard' ? 0 : 1) - (b.pool === 'hard' ? 0 : 1) || b.powerFrequency - a.powerFrequency || b.score - a.score);
-}
-const TYPE_RULES: [string, RegExp][] = [
-  ['Play', /\b(?:this play|this drama|this tragedy|this comedy)\b/gi], ['Novel', /\bthis novel\b/gi], ['Poem', /\bthis poem\b/gi],
-  ['Painting', /\bthis painting\b/gi], ['Painter', /\bthis painter\b/gi], ['Composer', /\bthis composer\b/gi],
-  ['Opera', /\bthis opera\b/gi], ['Symphony', /\bthis symphony\b/gi], ['Film', /\bthis (?:film|movie)\b/gi], ['Director', /\bthis director\b/gi],
-  ['Author', /\bthis (?:author|writer|poet|playwright|novelist)\b/gi], ['Country', /\bthis (?:country|nation)\b/gi], ['City', /\bthis city\b/gi],
-  ['Battle', /\bthis battle\b/gi], ['War', /\bthis war\b/gi], ['Treaty', /\bthis treaty\b/gi], ['President', /\bthis president\b/gi],
-  ['Scientist', /\bthis (?:scientist|physicist|chemist|biologist|mathematician)\b/gi], ['Philosopher', /\bthis philosopher\b/gi],
-  ['Religion', /\bthis religion\b/gi], ['Mythological Figure', /\bthis (?:god|goddess|deity|mythological figure)\b/gi], ['Character', /\bthis character\b/gi],
-  ['Event', /\bthis (?:event|revolution|uprising|festival)\b/gi], ['Person', /\bthis (?:man|woman|person|ruler|king|queen)\b/gi],
-  ['Work', /\bthis work\b/gi],
-];
-export function inferAnswerType(term: ImportedTerm, sources: SourceItem[]): string {
-  const scores = new Map<string, number>();
-  for (const source of sources.filter(s => !s.related)) {
-    const text = plainText(source.text).replace(/\bthis\s+(?:(?:American|English|French|Russian|German|Italian|British|Japanese|Chinese|Spanish|Greek|Roman|Irish|Scottish|Indian|African|Mexican|Canadian|Australian|ancient|modern|romantic|baroque|Victorian|female|male)\s+){1,3}/gi, 'this ');
-    for (const [type, pattern] of TYPE_RULES) {
-      const matches = [...text.matchAll(pattern)];
-      if (matches.length) scores.set(type, (scores.get(type) || 0) + 1 + (matches.some(m => m.index! > text.length - 140) ? 1 : 0));
-    }
-  }
-  const best = [...scores].sort((a, b) => b[1] - a[1])[0];
-  if (best) return best[0];
-  if (term.type?.trim()) return term.type.trim().replace(/:$/, '');
-  if (/^battle of\b/i.test(term.answer)) return 'Battle';
-  return sources.some(s => s.category === 'Literature') ? 'Work' : 'Answer';
-}
-export function dominantMetadata(sources: SourceItem[], hint?: string): { category: string; subcategory: string } {
-  const relevant = sources.filter(s => !s.related);
-  const mode = (values: string[]) => {
-    const counts = new Map<string, number>(); values.filter(Boolean).forEach(v => counts.set(v, (counts.get(v) || 0) + 1));
-    return [...counts].sort((a, b) => b[1] - a[1])[0]?.[0];
-  };
-  const category = mode(relevant.map(s => s.category)) || hint || mode(sources.map(s => s.category)) || 'Other';
-  return { category, subcategory: mode(relevant.filter(s => s.category === category).map(s => s.subcategory)) || '' };
-}
-export function formatClue(answerType: string, concepts: ClueConcept[]): string {
-  return concepts.length ? `${answerType}: ${concepts.map(c => c.text.replace(/[.;]+$/, '')).join('; ')}.` : '';
+  const chosen: ClueConcept[] = [], recurring = concepts.filter(c => c.frequency >= 2);
+  const add = (c: ClueConcept, pool = c.pool) => { if (chosen.length < limit && !chosen.some(p => redundantConcept(p, c))) chosen.push({ ...c, pool }); };
+  const hard = recurring.filter(c => c.pool === 'hard').sort((a, b) => (b.diagnostics?.finalHardScore ?? b.score) - (a.diagnostics?.finalHardScore ?? a.score));
+  for (const clue of hard) if (chosen.length < Math.min(3, Math.floor(limit / 2))) add(clue, 'hard');
+  const common = recurring.filter(c => c.pool === 'common').sort((a, b) => (b.diagnostics?.finalCommonScore ?? b.score) - (a.diagnostics?.finalCommonScore ?? a.score));
+  for (const clue of common) add(clue, 'common');
+  for (const clue of [...recurring].sort((a, b) => b.score - a.score)) add(clue);
+  if (chosen.length < 5) for (const clue of [...concepts].sort((a, b) => b.score - a.score)) add(clue);
+  return orderClues(chosen);
 }
