@@ -5,12 +5,14 @@ import { readSetting, savePronunciation } from '../data/db';
 import { spokenSpelling, validatePronunciation, type PersonalPronunciation } from '../data/pronunciations';
 import { ReaderManager, sharedKokoro } from '../reader/manager';
 import { plainText } from '../api/parser';
+import { unlockReaderAudio } from '../reader/audio-gesture';
 
 export function PronunciationEditor({ initial, question = '', config, onClose, onSaved }: { initial?: PersonalPronunciation; question?: string; config?: Config; onClose(): void; onSaved?(): void }) {
   const [canonical, setCanonical] = useState(initial?.canonical ?? ''); const [spoken, setSpoken] = useState(initial?.spoken ?? ''); const [caseSensitive, setCaseSensitive] = useState(initial?.caseSensitive ?? false); const [status, setStatus] = useState(''); const [busy, setBusy] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null); const reader = useRef<ReaderManager | null>(null);
   useEffect(() => { dialog.current?.showModal(); return () => { reader.current?.dispose(); }; }, []);
   const preview = async () => {
+    void unlockReaderAudio();
     reader.current ??= new ReaderManager(sharedKokoro, false); setBusy(true);
     try { validatePronunciation({ canonical: canonical || 'Preview', spoken }); const c = config ?? await readSetting<Config>('config') ?? DEFAULT_CONFIG;
       // Preview respelling directly so an existing lexicon entry cannot rewrite it again.

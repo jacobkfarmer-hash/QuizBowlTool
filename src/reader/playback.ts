@@ -1,7 +1,7 @@
 export interface Progress { tokens: number; elapsedMs: number; durationMs?: number; ended: boolean }
 export interface PlaybackHandle { pause(): void; resume(): void; stop(): void; current(): Progress; seek?(ms: number): void }
 export interface Voice { id: string; name: string }
-export interface TTSOptions { voice: string; speed: number; onProgress(p: Progress): void; onStatus(message: string): void; startToken?: number; signal?: AbortSignal; onError?(error: Error): void }
+export interface TTSOptions { voice: string; speed: number; onProgress(p: Progress): void; onStatus(message: string): void; onAudioStart?(engine: 'kokoro' | 'system'): void; startToken?: number; signal?: AbortSignal; onError?(error: Error): void }
 import type { SpeechSegment } from './text';
 export interface TTSEngine { id: string; name: string; initialize(onStatus: (s: string) => void): Promise<void>; speak(segments: SpeechSegment[], options: TTSOptions): Promise<PlaybackHandle>; listVoices(): Promise<Voice[]>; isSupported(): Promise<boolean>; dispose(): void }
 import { reached } from './text';

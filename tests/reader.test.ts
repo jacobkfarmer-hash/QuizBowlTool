@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-const mocks = vi.hoisted(() => ({ neuralInit: vi.fn(), neuralSpeak: vi.fn(), systemInit: vi.fn(), systemSpeak: vi.fn(), dispose: vi.fn() }));
-vi.mock('../src/reader/kokoro', () => ({ KokoroEngine: class { initialize = mocks.neuralInit; speak = mocks.neuralSpeak; dispose = mocks.dispose; } }));
-vi.mock('../src/reader/system', () => ({ SystemEngine: class { initialize = mocks.systemInit; speak = mocks.systemSpeak; dispose = mocks.dispose; } }));
+const mocks = vi.hoisted(() => ({ neuralInit: vi.fn(), neuralSpeak: vi.fn(), systemInit: vi.fn(), systemSpeak: vi.fn(), dispose: vi.fn(), disable: vi.fn() }));
+vi.mock('../src/reader/kokoro', () => ({ KokoroEngine: class { initialize = mocks.neuralInit; speak = mocks.neuralSpeak; dispose = mocks.dispose; disable = mocks.disable; } }));
+vi.mock('../src/reader/system', () => ({ primeSystemSpeech() {}, SystemEngine: class { initialize = mocks.systemInit; speak = mocks.systemSpeak; dispose = mocks.dispose; } }));
 import { ReaderManager } from '../src/reader/manager';
 import { DEFAULT_CONFIG } from '../src/core/config';
 import { clearAll, savePronunciation } from '../src/data/db';
+import { AudioUnlockError } from '../src/reader/audio-context';
 beforeEach(() => { for (const mock of Object.values(mocks)) mock.mockReset(); vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'requestAnimationFrame', 'cancelAnimationFrame', 'performance'] }); });
 afterEach(() => vi.useRealTimers());
 it('text reader pauses immediately and resumes at the same offset', async () => {
@@ -32,4 +33,39 @@ it('preview speaks the proposed spelling directly without a second dictionary su
 it('Auto honors an explicitly selected system voice instead of substituting Heart', async () => {
   mocks.systemSpeak.mockResolvedValue({ stop() {}, pause() {}, resume() {}, current() { return { tokens: 0, elapsedMs: 0, ended: false }; } }); const r = new ReaderManager();
   await r.read('Read this clue.', { ...DEFAULT_CONFIG, voice: 'system:installed-local-voice' }, { onProgress() {}, onStatus() {} }); expect(mocks.neuralInit).not.toHaveBeenCalled(); expect(mocks.systemSpeak.mock.calls[0][1].voice).toBe('system:installed-local-voice'); r.dispose();
+});
+
+it('does not retry failed Kokoro on later questions, including explicitly selected Kokoro', async () => {
+  mocks.neuralInit.mockRejectedValue(new Error('WASM unavailable'));
+  mocks.systemSpeak.mockResolvedValue({ stop() {}, pause() {}, resume() {}, current: () => ({ tokens: 0, elapsedMs: 0, ended: false }) });
+  const reader = new ReaderManager();
+  await reader.read('First question.', { ...DEFAULT_CONFIG, engine: 'kokoro' }, { onProgress() {}, onStatus() {} });
+  await reader.read('Second question.', { ...DEFAULT_CONFIG, engine: 'kokoro' }, { onProgress() {}, onStatus() {} });
+  expect(mocks.neuralInit).toHaveBeenCalledOnce(); expect(mocks.disable).toHaveBeenCalledOnce();
+  expect(mocks.systemSpeak).toHaveBeenCalledTimes(2); reader.dispose();
+});
+
+it('audio permission failure falls back without permanently disabling a healthy model', async () => {
+  mocks.neuralSpeak.mockRejectedValue(new AudioUnlockError());
+  mocks.systemSpeak.mockResolvedValue({ stop() {}, pause() {}, resume() {}, current: () => ({ tokens: 0, elapsedMs: 0, ended: false }) });
+  const reader = new ReaderManager();
+  await reader.read('First question.', DEFAULT_CONFIG, { onProgress() {}, onStatus() {} });
+  await reader.read('Second question.', DEFAULT_CONFIG, { onProgress() {}, onStatus() {} });
+  expect(mocks.disable).not.toHaveBeenCalled(); expect(mocks.neuralSpeak).toHaveBeenCalledTimes(2);
+  reader.dispose();
+});
+
+it('asynchronous native speech failure becomes usable text without a fatal gameplay error', async () => {
+  const status = vi.fn();
+  mocks.systemSpeak.mockImplementation(async (_segments, options) => {
+    queueMicrotask(() => options.onError(new Error('synthesis-failed')));
+    return { stop() {}, pause() {}, resume() {}, current: () => ({ tokens: 0, elapsedMs: 0, ended: false }) };
+  });
+  const reader = new ReaderManager();
+  const initial = await reader.read('A question remains playable.', { ...DEFAULT_CONFIG, engine: 'system' }, { onProgress() {}, onStatus: status });
+  expect(initial).toBeDefined(); // Gameplay receives a ready handle before fallback.
+  await Promise.resolve(); await Promise.resolve();
+  vi.advanceTimersByTime(1600);
+  expect(status).toHaveBeenCalledWith('Reading · text'); expect(reader.current()?.tokens).toBeGreaterThan(0);
+  reader.dispose();
 });

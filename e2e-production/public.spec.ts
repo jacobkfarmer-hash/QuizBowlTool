@@ -5,7 +5,10 @@ import { fileURLToPath } from 'node:url';
 import { tossup } from '../tests/fixtures';
 
 async function completeSessionAndSaveCorrection(page: Page) {
-  await page.route('https://www.qbreader.org/api/random-tossup?*', r => r.fulfill({ json: { tossups: [tossup] } }));
+  await page.route('https://www.qbreader.org/api/random-tossup?*', route => {
+    const url = new URL(route.request().url());
+    return route.fulfill({ json: { tossups: [{ ...tossup, category: url.searchParams.get('categories'), difficulty: Number(url.searchParams.get('difficulties')) }] } });
+  });
   await page.getByRole('spinbutton', { name: 'Custom tossup count' }).fill('1');
   await page.getByLabel('Presentation', { exact: true }).selectOption('text');
   await page.getByRole('button', { name: /Start session/ }).click();
