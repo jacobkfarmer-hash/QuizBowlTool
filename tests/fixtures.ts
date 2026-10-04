@@ -1,0 +1,6 @@
+// Original synthetic questions, shaped like the verified official API schema.
+// No production question corpus is bundled.
+import type { Bonus, Tossup } from '../src/core/types';
+const base = { category: 'Science', subcategory: 'Physics', difficulty: 3, number: 1, packet: { _id: 'fixture-packet', name: 'Test packet', number: 1 }, set: { _id: 'fixture-set', name: '2026 Contract Test', year: 2026, standard: true }, updatedAt: '2026-10-03T12:00:00.000Z' };
+export const tossup: Tossup = { ...base, _id: 'fixture-tu', question: '<b>This test clue describes a familiar molecule. (*)</b> Name the liquid water.', question_sanitized: 'This test clue describes a familiar molecule. (*) Name the liquid water.', answer: '<b><u>water</u></b> [prompt on liquid]', answer_sanitized: 'water [prompt on liquid]' };
+export const bonus: Bonus = { ...base, _id: 'fixture-bonus', leadin: 'Name these simple substances, for ten points each.', leadin_sanitized: 'Name these simple substances, for ten points each.', parts: ['Name H2O.', 'Name the gas O2.', 'Name NaCl.'], parts_sanitized: ['Name H2O.', 'Name the gas O2.', 'Name NaCl.'], answers: ['<b><u>water</u></b>', '<b><u>oxygen</u></b>', '<b><u>sodium chloride</u></b>'], answers_sanitized: ['water', 'oxygen', 'sodium chloride'] };

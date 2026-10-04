@@ -1,0 +1,242 @@
+{
+  "checkedAt": "2026-10-04T04:00:45.821Z",
+  "cors": [
+    {
+      "path": "random-tossup",
+      "status": 200,
+      "responseType": "cors",
+      "keys": [
+        "tossups"
+      ]
+    },
+    {
+      "path": "random-bonus",
+      "status": 200,
+      "responseType": "cors",
+      "keys": [
+        "bonuses"
+      ]
+    },
+    {
+      "path": "check-answer",
+      "status": 200,
+      "responseType": "cors",
+      "keys": [
+        "directive"
+      ],
+      "directive": "accept"
+    }
+  ],
+  "pagesOrigin": {
+    "status": 200,
+    "allowOrigin": "*"
+  },
+  "backend": "wasm",
+  "dtype": "q8",
+  "voices": 28,
+  "results": [
+    {
+      "text": "The hero is Diomedes.",
+      "phonemes": [
+        "ðə hˈiəɹoʊ ɪz dɪˈoʊmdz."
+      ],
+      "texts": [
+        "The hero is Diomedes."
+      ],
+      "samples": 47400,
+      "energy": 187.1497877937268
+    },
+    {
+      "text": "The hero is dye oh meedees.",
+      "phonemes": [
+        "ðə hˈiəɹoʊ ɪz dˈaɪ ˈoʊ mˈiːdiːz."
+      ],
+      "texts": [
+        "The hero is dye oh meedees."
+      ],
+      "samples": 55800,
+      "energy": 221.07990037271517
+    },
+    {
+      "text": "Read Thucydides.",
+      "phonemes": [
+        "ɹˈiːd θˈʌsɪdˌaɪdz."
+      ],
+      "texts": [
+        "Read Thucydides."
+      ],
+      "samples": 45000,
+      "energy": 191.9424530447785
+    },
+    {
+      "text": "Read thoo siddy deez.",
+      "phonemes": [
+        "ɹˈiːd θˈuː sˈɪdi dˈiːz."
+      ],
+      "texts": [
+        "Read thoo siddy deez."
+      ],
+      "samples": 47400,
+      "energy": 186.14857729944066
+    },
+    {
+      "text": "René Descartes wrote this.",
+      "phonemes": [
+        "ɹᵻnˈeɪ dᵻskˈɑːɹts ɹˈoʊt ðˈɪs."
+      ],
+      "texts": [
+        "René Descartes wrote this."
+      ],
+      "samples": 52200,
+      "energy": 256.5297737124237
+    },
+    {
+      "text": "ruh nay day cart wrote this.",
+      "phonemes": [
+        "ɹˈʌ nˈeɪ dˈeɪ kˈɑːɹt ɹˈoʊt ðˈɪs."
+      ],
+      "texts": [
+        "ruh nay day cart wrote this."
+      ],
+      "samples": 54000,
+      "energy": 249.58506875467705
+    },
+    {
+      "text": "Name Ngũgĩ wa Thiong’o.",
+      "phonemes": [
+        "nˈeɪm əŋɡjˈuːɡi wˈɑː θˌaɪoʊŋˈoʊ."
+      ],
+      "texts": [
+        "Name Ngũgĩ wa Thiong’o."
+      ],
+      "samples": 54000,
+      "energy": 218.74338506719474
+    },
+    {
+      "text": "Dvořák composed this.",
+      "phonemes": [
+        "dˈiːvoːɹˈɑːk kəmpˈoʊzd ðˈɪs."
+      ],
+      "texts": [
+        "Dvořák composed this."
+      ],
+      "samples": 49800,
+      "energy": 240.70345710628803
+    },
+    {
+      "text": "duh vor zhahk composed this.",
+      "phonemes": [
+        "dˈʌ vˈoːɹ ʒˈɑːk kəmpˈoʊzd ðˈɪs."
+      ],
+      "texts": [
+        "duh vor zhahk composed this."
+      ],
+      "samples": 54600,
+      "energy": 243.06862216549982
+    },
+    {
+      "text": "Visit Ljubljana.",
+      "phonemes": [
+        "vˈɪzɪt ljuːbljˈɑːnə."
+      ],
+      "texts": [
+        "Visit Ljubljana."
+      ],
+      "samples": 42600,
+      "energy": 188.1491002289074
+    },
+    {
+      "text": "Define Bodhisattva.",
+      "phonemes": [
+        "dᵻfˈaɪn bˈɑːdhɪsˌætvə."
+      ],
+      "texts": [
+        "Define Bodhisattva."
+      ],
+      "samples": 47400,
+      "energy": 213.5393143769488
+    },
+    {
+      "text": "Define boh dee saht vah.",
+      "phonemes": [
+        "dᵻfˈaɪn bˈoʊ dˈiː sˈɑːt vˈɑː."
+      ],
+      "texts": [
+        "Define boh dee saht vah."
+      ],
+      "samples": 52800,
+      "energy": 243.50431373878217
+    },
+    {
+      "text": "Johann Wolfgang von Goethe wrote this.",
+      "phonemes": [
+        "jˈoʊhɑːn wˈʊlfɡæŋ vˈɑːn ɡˈoʊð ɹˈoʊt ðˈɪs."
+      ],
+      "texts": [
+        "Johann Wolfgang von Goethe wrote this."
+      ],
+      "samples": 68400,
+      "energy": 327.7358919090878
+    },
+    {
+      "text": "yo hahn volf gahng fon gerta wrote this.",
+      "phonemes": [
+        "jˈoʊ hˈɑːn vˈɑːlf ɡˈɑːŋ fˈɑːn ɡˈɜːɾɚ ɹˈoʊt ðˈɪs."
+      ],
+      "texts": [
+        "yo hahn volf gahng fon gerta wrote this."
+      ],
+      "samples": 75000,
+      "energy": 335.8715842317233
+    },
+    {
+      "text": "Name gerta.",
+      "phonemes": [
+        "nˈeɪm ɡˈɜːɾə."
+      ],
+      "texts": [
+        "Name gerta."
+      ],
+      "samples": 39000,
+      "energy": 171.32036673497845
+    },
+    {
+      "text": "Read Aeschylus.",
+      "phonemes": [
+        "ɹˈiːd ˈiːʃɪləs."
+      ],
+      "texts": [
+        "Read Aeschylus."
+      ],
+      "samples": 40800,
+      "energy": 174.15879724973937
+    },
+    {
+      "text": "Read eschylus.",
+      "phonemes": [
+        "ɹˈiːd ˈɛʃɪləs."
+      ],
+      "texts": [
+        "Read eschylus."
+      ],
+      "samples": 39600,
+      "energy": 169.1695537946402
+    },
+    {
+      "text": "A short first sentence. A second sentence follows naturally.",
+      "phonemes": [
+        "ɐ ʃˈɔːɹt fˈɜːst sˈɛntəns. ɐ sˈɛkənd sˈɛntəns fˈɑːloʊz nˈætʃɚɹəli."
+      ],
+      "texts": [
+        "A short first sentence. A second sentence follows naturally."
+      ],
+      "samples": 102000,
+      "energy": 465.7789497970748
+    }
+  ],
+  "cacheNames": [
+    "transformers-cache",
+    "kokoro-voices"
+  ],
+  "gpu": false
+}
