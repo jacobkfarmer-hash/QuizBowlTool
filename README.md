@@ -45,7 +45,7 @@ The test browser is installed in the ignored `.browsers/` directory, keeping it 
 - Small question pools, one upcoming tossup prefetched, optional bonus prefetch, repeat prevention by stable IDs, bounded exhaustion handling, retry states and refresh recovery.
 - Results, full question/bonus review, sortable category/difficulty/quarter tables, configured versus realized distributions, buzz metrics, Match trends and deterministic performance observations.
 - Local session history, custom history filters, save/load/rename/delete presets, confirmed deletion/reset controls, system or explicit dark/light theme, keyboard focus, reduced motion and phone layouts.
-- A deterministic spoken-text pipeline, built-in name dictionary, personal pronunciation corrections with voice preview, development-only phoneme diagnostics, validated JSON data transfer, About screen, and an installable PWA with offline history/settings.
+- A deterministic spoken-text pipeline, built-in name dictionary, personal pronunciation corrections with voice preview, development-only phoneme diagnostics, validated JSON data transfer, and an About screen.
 
 ## Deploy publicly for free — Cloudflare Pages
 
@@ -69,11 +69,11 @@ Use this existing project as the root of a GitHub repository, including `package
 
 See Cloudflare's [React deployment guide](https://developers.cloudflare.com/pages/framework-guides/deploy-a-react-site/), [Git integration](https://developers.cloudflare.com/pages/get-started/git-integration/) and [custom domains](https://developers.cloudflare.com/pages/configuration/custom-domains/).
 
-No ONNX model weights are bundled in `dist/`. Kokoro obtains them from its supported Hugging Face model source. Bundled ONNX **runtime** WASM is code, not model weights; its largest file is about 20.6 MiB, below Pages' [25 MiB individual-asset limit](https://developers.cloudflare.com/pages/platform/limits/). Keep the entire output, including `runtime/`, worker assets, manifest and `sw.js`. Host at a domain root. The app needs no running server after deployment.
+No ONNX model weights are bundled in `dist/`. Kokoro obtains them from its supported Hugging Face model source. Bundled ONNX **runtime** WASM is code, not model weights; its largest file is about 20.6 MiB, below Pages' [25 MiB individual-asset limit](https://developers.cloudflare.com/pages/platform/limits/). Keep the entire output, including `runtime/`, reader worker assets and manifest. No service worker is generated. Host at a domain root. The app needs no running server after deployment.
 
 Live browser checks returned HTTP 200 with CORS responses for random tossups, random bonuses and answer checking. A request with a Pages-style Origin also returned `Access-Control-Allow-Origin: *`. Direct **browser → QBReader** therefore works; there is no Worker proxy. This verifies the current architecture, not an already published Cloudflare URL. Recheck on your final public URL if the upstream API changes.
 
-## Pronunciation, sharing and offline use
+## Pronunciation, sharing and browser storage
 
 The canonical clue remains unchanged. `canonicalDisplayText` is the safe display form; `spokenText` is separate. Processing detects explicit pronunciation guides, resolves whole-word/name corrections, normalizes common notation, builds contextual clauses, obtains Kokoro's actual phonemes, then generates local audio. Priority is **personal correction → built-in lexicon → explicit writer guide → default phonemizer**. A matched guide is silent even when a higher-priority correction supplies the spelling. Ordinary semantic parentheses remain spoken. Unlabelled ambiguous guides are deliberately left alone.
 
@@ -83,7 +83,11 @@ Use **Fix pronunciation** after a tossup/bonus part or in question review. Enter
 
 **Settings → Export Data / Import Data** moves sessions, presets, corrections, config/theme and seen IDs with version 1 `cadence-data` JSON. Nested records, enums, numeric bounds, IDs, dates, dictionary entries and question schemas are validated before a transaction writes anything. HTML is sanitized. Imports merge history/presets without overwriting an existing ID, and replace matching corrections/preferences. Failed writes roll back. Invalid versions/data and files over 40 MB are rejected. Recovery checkpoints are intentionally device-specific and excluded. No cloud account is needed.
 
-The production PWA caches its small app shell and static code. Reader/runtime code is cached on demand; model downloads use Kokoro/Transformers' separate browser caches. QBReader requests are never intercepted or cached by the service worker. After a successful first visit, saved history/settings can open offline. Fresh questions and answer checking require internet; offline neural speech depends on retained model resources and device support. Install through the browser's Install app / Add to Home Screen control. An updated service worker waits until old app tabs close, protecting active sessions; close all Cadence tabs and reopen to receive the update. About explains these limits in the app.
+Cadence has no app-shell service worker and requires internet to load the site, fetch fresh questions and check answers. History/settings remain in IndexedDB across refreshes. Kokoro/Transformers model and voice caches are independent and unchanged. The manifest and icons remain, but installability and offline page loading are not supported.
+
+A temporary **production-only startup migration** inspects this origin's registrations, unregisters the legacy root `/sw.js` worker (active, waiting or installing), and deletes only Cache Storage names beginning `cadence-shell-` or `cadence-runtime-`. Unrelated registrations/caches, model/voice caches and IndexedDB are preserved. A controlled page reloads once before React/gameplay mounts to release the old controller; a sessionStorage guard prevents reload loops. Missing or restricted browser APIs do not prevent startup. Remove `src/legacy-worker-cleanup.ts` and its startup call after a release or two.
+
+The migration must execute the new JavaScript. If an old cache-first worker keeps serving the previous release, use Chrome/Edge's hard reload (Ctrl+Shift+R) to load the new release; then cleanup runs automatically. Merely removing `sw.js` on the server cannot execute code in an already cached old app. Do not clear all site data, since that would delete saved IndexedDB history/settings. Close stale app tabs so they cannot run the former registration code again.
 
 ## Probability behavior
 
@@ -157,7 +161,7 @@ Pattern observations run entirely on the client with no LLM. They need at least 
 
 ## Local data, privacy and recovery
 
-Dexie wraps IndexedDB tables for settings, presets, seen question IDs and sessions containing raw tossup/bonus events plus reviewed questions. Checkpoints include the current question, reader token offset, phase and rule configuration. Progress is checkpointed about once a second; buzzes, rulings and other transitions save immediately. Writes are serialized in invocation order. An interrupted answer check returns to answering on recovery; the app never silently invents a ruling. Seen IDs are persisted before presenting a question. Full history/statistics work offline after the production app shell has been cached; new questions require QBReader access.
+Dexie wraps IndexedDB tables for settings, presets, seen question IDs and sessions containing raw tossup/bonus events plus reviewed questions. Checkpoints include the current question, reader token offset, phase and rule configuration. Progress is checkpointed about once a second; buzzes, rulings and other transitions save immediately. Writes are serialized in invocation order. An interrupted answer check returns to answering on recovery; the app never silently invents a ruling. Seen IDs are persisted before presenting a question. History/statistics persist across refreshes; loading the site and retrieving new questions requires internet.
 
 Your private analytics and history are not uploaded. Necessary remote requests go only to QBReader’s question/answer services and Hugging Face’s model/resource hosts (which may use their download CDN). Typed answers and answerlines are sent to QBReader for judging. No paid or metered speech service is used. Browser permission/storage failures are shown explicitly. Session deletion retains seen IDs; Reset question history clears only seen IDs; Clear all local data clears settings, history, seen IDs presets and pronunciation corrections after confirmation. TTS model CacheStorage is browser-managed and separate from application data; clear it through browser site-data controls if needed.
 
@@ -180,7 +184,7 @@ Remote HTML is untrusted and sanitized with DOMPurify’s narrow tag allowlist b
 | Derived statistics and deterministic patterns | `src/stats/metrics.ts`, `patterns.ts` |
 | Durable settings, raw sessions and checkpoint queue | `src/data/db.ts` |
 | Versioned backup validation and transactional import | `src/data/transfer.ts` |
-| Static PWA caching and manifest | `scripts/pwa-plugin.ts`, `public/manifest.webmanifest` |
+| Temporary legacy worker cleanup; retained manifest | `src/legacy-worker-cleanup.ts`, `public/manifest.webmanifest` |
 | Setup, gameplay, review, history and results | `src/ui/`, `src/App.tsx`, `src/styles.css` |
 
 Stale work is guarded by generation IDs and abort signals. A retired question’s syntheses can finish in the worker, but they cannot begin playback or update the current question. Illegal reducer actions do nothing. Expensive neural inference does not run on the React thread.
